@@ -1,0 +1,20 @@
+[package]
+name = "music-linux"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.95"
+description = "Linux 原生音乐播放器，功能参考 MusicPlayer2"
+
+[dependencies]
+eframe = "0.36"
+rodio = "0.22"
+lofty = "0.25"
+rfd = "0.17"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+dirs = "6"
+encoding_rs = "0.8"
+
+[profile.release]
+lto = true
+strip = true
