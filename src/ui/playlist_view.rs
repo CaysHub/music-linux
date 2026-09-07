@@ -1,10 +1,17 @@
-//! 播放列表视图：双击播放、当前曲跳动均衡器动画、行尾常驻移除按钮
+//! 播放列表视图：双击播放、当前曲跳动均衡器动画、行尾红色移除按钮（悬浮二次确认）
 
 use eframe::egui;
+use eframe::egui::Popup;
 use egui_material_icons::icons::*;
 
 use crate::app::MusicApp;
 use crate::audio::PlaybackState;
+
+const RED: egui::Color32 = egui::Color32::from_rgb(225, 95, 95);
+
+fn red_bg(alpha: u8) -> egui::Color32 {
+    egui::Color32::from_rgba_unmultiplied(225, 95, 95, alpha)
+}
 
 pub fn draw(app: &mut MusicApp, ui: &mut egui::Ui, ctx: &egui::Context) {
     if app.playlist.is_empty() {
@@ -45,6 +52,7 @@ pub fn draw(app: &mut MusicApp, ui: &mut egui::Ui, ctx: &egui::Context) {
                     egui::Color32::TRANSPARENT
                 };
 
+                let mut remove_rect = egui::Rect::NOTHING;
                 let row = egui::Frame::NONE
                     .fill(fill)
                     .corner_radius(4)
@@ -52,8 +60,10 @@ pub fn draw(app: &mut MusicApp, ui: &mut egui::Ui, ctx: &egui::Context) {
                     .show(ui, |ui| {
                         ui.horizontal(|ui| {
                             // 序号 / 播放指示（跳动的均衡器）
-                            let (rect, _) =
-                                ui.allocate_exact_size(egui::vec2(30.0, 18.0), egui::Sense::hover());
+                            let (rect, _) = ui.allocate_exact_size(
+                                egui::vec2(30.0, 18.0),
+                                egui::Sense::hover(),
+                            );
                             if is_current {
                                 draw_equalizer(ui, rect, accent, playing);
                             } else {
@@ -83,7 +93,8 @@ pub fn draw(app: &mut MusicApp, ui: &mut egui::Ui, ctx: &egui::Context) {
                             ui.with_layout(
                                 egui::Layout::right_to_left(egui::Align::Center),
                                 |ui| {
-                                    remove_button(ui, &mut remove_index, i);
+                                    remove_rect =
+                                        remove_button(ui, &mut remove_index, &track.title, i);
                                     ui.label(
                                         egui::RichText::new(super::format_duration(track.duration))
                                             .weak()
@@ -94,8 +105,14 @@ pub fn draw(app: &mut MusicApp, ui: &mut egui::Ui, ctx: &egui::Context) {
                         });
                     });
 
-                // 整行交互：双击播放、右键菜单（覆盖在行矩形上的透明 hit-test）
-                let hit = ui.interact(row.response.rect, row_id, egui::Sense::click());
+                // 整行交互：双击播放、右键菜单。
+                // 注意：hit 区域必须排除行尾移除按钮，否则会遮挡其点击
+                //（egui 中后注册的组件在点击测试中位于顶层）。
+                let mut hit_rect = row.response.rect;
+                if remove_rect.is_finite() {
+                    hit_rect.set_right(remove_rect.left() - 4.0);
+                }
+                let hit = ui.interact(hit_rect, row_id, egui::Sense::click());
                 if hit.hovered() {
                     ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
                 }
@@ -103,14 +120,17 @@ pub fn draw(app: &mut MusicApp, ui: &mut egui::Ui, ctx: &egui::Context) {
                     play_index = Some(i);
                 }
                 hit.context_menu(|ui| {
-                    if ui.button("▶ 播放").clicked() {
+                    if ui
+                        .button(format!("{} 播放", ICON_PLAY_ARROW.codepoint))
+                        .clicked()
+                    {
                         play_index = Some(i);
                         ui.close();
                     }
                     if ui
                         .button(
-                            egui::RichText::new("移除")
-                                .color(egui::Color32::from_rgb(220, 90, 90)),
+                            egui::RichText::new(format!("{} 移除", ICON_DELETE.codepoint))
+                                .color(RED),
                         )
                         .clicked()
                     {
@@ -129,10 +149,7 @@ pub fn draw(app: &mut MusicApp, ui: &mut egui::Ui, ctx: &egui::Context) {
         ));
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
             if ui
-                .button(
-                    egui::RichText::new(format!("{} 清空列表", ICON_DELETE.codepoint))
-                        .color(egui::Color32::from_rgb(220, 90, 90)),
-                )
+                .button(egui::RichText::new(format!("{} 清空列表", ICON_DELETE.codepoint)).color(RED))
                 .on_hover_text("清空播放列表")
                 .clicked()
             {
@@ -149,24 +166,33 @@ pub fn draw(app: &mut MusicApp, ui: &mut egui::Ui, ctx: &egui::Context) {
     }
 }
 
-/// 行尾移除按钮：Material close 图标，居中，平时低调灰色，悬停变红
-fn remove_button(ui: &mut egui::Ui, remove_index: &mut Option<usize>, i: usize) {
+/// 行尾移除按钮：Material close 图标，红色醒目，点击弹出二次确认悬浮框。
+/// 返回按钮矩形，供整行 hit 区域排除。
+fn remove_button(
+    ui: &mut egui::Ui,
+    remove_index: &mut Option<usize>,
+    title: &str,
+    i: usize,
+) -> egui::Rect {
     let (rect, resp) = ui.allocate_exact_size(egui::vec2(24.0, 20.0), egui::Sense::click());
     let hovered = resp.hovered();
-    if hovered {
-        ui.painter().rect(
-            rect,
-            egui::CornerRadius::same(4),
-            egui::Color32::from_rgba_unmultiplied(220, 90, 90, 40),
-            egui::Stroke::NONE,
-            egui::StrokeKind::Inside,
-        );
-    }
-    let color = if hovered {
-        egui::Color32::from_rgb(225, 100, 100)
+
+    // 红色醒目：常态淡红底 + 红字，悬停加深
+    let (bg, fg) = if hovered {
+        (
+            red_bg(80),
+            egui::Color32::from_rgb(245, 130, 130),
+        )
     } else {
-        ui.visuals().widgets.inactive.fg_stroke.color
+        (red_bg(46), RED)
     };
+    ui.painter().rect(
+        rect,
+        egui::CornerRadius::same(4),
+        bg,
+        egui::Stroke::NONE,
+        egui::StrokeKind::Inside,
+    );
     ui.painter().text(
         rect.center(),
         egui::Align2::CENTER_CENTER,
@@ -175,13 +201,36 @@ fn remove_button(ui: &mut egui::Ui, remove_index: &mut Option<usize>, i: usize) 
             14.0,
             egui::FontFamily::Name(egui_material_icons::FONT_FAMILY.into()),
         ),
-        color,
+        fg,
     );
-    let clicked = resp.clicked();
+    // 悬浮二次确认框
+    let popup_id = egui::Id::new("remove_confirm").with(i);
+    let popup = Popup::from_toggle_button_response(&resp).id(popup_id);
     resp.on_hover_cursor(egui::CursorIcon::PointingHand);
-    if clicked {
-        *remove_index = Some(i);
-    }
+    popup.show(|ui| {
+        ui.set_min_width(130.0);
+        ui.label(egui::RichText::new("移除此曲目？").strong());
+        ui.label(
+            egui::RichText::new(if title.chars().count() > 14 {
+                format!("{}…", title.chars().take(14).collect::<String>())
+            } else {
+                title.to_string()
+            })
+            .small()
+            .weak(),
+        );
+        ui.horizontal(|ui| {
+            if ui.button(egui::RichText::new("移除").color(RED)).clicked() {
+                *remove_index = Some(i);
+                ui.close();
+            }
+            if ui.button("取消").clicked() {
+                ui.close();
+            }
+        });
+    });
+
+    rect
 }
 
 /// 当前播放行的跳动均衡器（4 根柱子，正弦相位错开）

@@ -38,13 +38,16 @@ pub fn draw(app: &mut MusicApp, ui: &mut egui::Ui, ctx: &egui::Context) {
             .as_ref()
             .is_some_and(|e| e.state == PlaybackState::Paused);
 
-        // ---------- 传输按钮（Material Symbols 图标） ----------
+        // ---------- 传输按钮（Material Symbols 图标，统一尺寸保证对齐） ----------
         let icon_btn = |ui: &mut egui::Ui,
                         icon: egui_material_icons::MaterialIcon,
                         size: f32,
                         tip: &str| {
-            ui.add(egui::Button::new(icon.rich_text().size(size)))
-                .on_hover_text(tip)
+            ui.add(
+                egui::Button::new(icon.rich_text().size(size))
+                    .min_size(egui::vec2(34.0, 30.0)),
+            )
+            .on_hover_text(tip)
         };
         if icon_btn(ui, ICON_SKIP_PREVIOUS, 20.0, "上一曲").clicked() {
             app.prev(ctx);
