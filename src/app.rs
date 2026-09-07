@@ -37,6 +37,9 @@ pub struct MusicApp {
 impl MusicApp {
     pub fn new(cc: &eframe::CreationContext<'_>) -> Self {
         setup_fonts(&cc.egui_ctx);
+        // 注册 Material Symbols 图标字体（已作为 Proportional 的回退字体，
+        // 任何文本中的图标码点都能直接渲染）
+        egui_material_icons::initialize(&cc.egui_ctx);
 
         let config = AppConfig::load();
         let engine_result = AudioEngine::new();
@@ -365,7 +368,8 @@ impl eframe::App for MusicApp {
             .as_ref()
             .is_some_and(|e| e.state == PlaybackState::Playing)
         {
-            ctx.request_repaint_after(Duration::from_millis(100));
+            // 50ms 刷新：进度/歌词 + 列表行均衡器动画
+            ctx.request_repaint_after(Duration::from_millis(50));
         }
     }
 

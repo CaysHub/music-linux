@@ -6,6 +6,7 @@ mod lyrics_view;
 mod playlist_view;
 
 use eframe::egui;
+use egui_material_icons::icons::*;
 
 use crate::app::{MainTab, MusicApp};
 
@@ -50,8 +51,12 @@ pub fn draw(app: &mut MusicApp, ui: &mut egui::Ui) {
             ui.selectable_value(&mut app.tab, MainTab::Playlist, "播放列表");
             ui.selectable_value(&mut app.tab, MainTab::Lyrics, "歌词");
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                let icon = if app.dark_mode { "☀ 浅色" } else { "🌙 深色" };
-                if ui.small_button(icon).clicked() {
+                let (icon, text) = if app.dark_mode {
+                    (ICON_LIGHT_MODE, "浅色")
+                } else {
+                    (ICON_DARK_MODE, "深色")
+                };
+                if ui.button(format!("{} {text}", icon.codepoint)).clicked() {
                     app.dark_mode = !app.dark_mode;
                     let visuals = if app.dark_mode {
                         egui::Visuals::dark()

@@ -40,15 +40,6 @@ impl PlayMode {
             PlayMode::Shuffle => "随机播放",
         }
     }
-
-    pub fn icon(self) -> &'static str {
-        match self {
-            PlayMode::Sequential => "➡",
-            PlayMode::RepeatAll => "🔁",
-            PlayMode::RepeatOne => "🔂",
-            PlayMode::Shuffle => "🔀",
-        }
-    }
 }
 
 /// 一首曲目。标签信息在添加时读取一次并缓存。
