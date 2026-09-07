@@ -10,11 +10,16 @@ mod tags;
 mod ui;
 
 fn main() -> eframe::Result {
+    // GNOME Wayland 下 winit 的客户端标题栏渲染存在中文乱码/按钮错位问题，
+    // 移除 WAYLAND_DISPLAY 强制走 X11(XWayland)：Mutter 的 X11 服务端标题栏渲染成熟可靠。
+    // 如需恢复 Wayland 原生，删除此行即可。
+    std::env::remove_var("WAYLAND_DISPLAY");
+
     let options = eframe::NativeOptions {
         viewport: eframe::egui::ViewportBuilder::default()
             .with_inner_size([960.0, 640.0])
             .with_min_inner_size([640.0, 420.0])
-            .with_title("Music Player"),
+            .with_title("Music Player 音乐播放器"),
         ..Default::default()
     };
     eframe::run_native(

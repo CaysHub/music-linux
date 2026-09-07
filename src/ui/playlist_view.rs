@@ -1,4 +1,4 @@
-//! 播放列表视图：双击播放、当前曲高亮、单行移除
+//! 播放列表视图：双击播放、当前曲柔和高亮、右键菜单（播放/移除）
 
 use eframe::egui;
 
@@ -22,59 +22,101 @@ pub fn draw(app: &mut MusicApp, ui: &mut egui::Ui, ctx: &egui::Context) {
         .show(ui, |ui| {
             for (i, track) in app.playlist.tracks.iter().enumerate() {
                 let is_current = app.playlist.current == Some(i);
+                let row_id = egui::Id::new("playlist_row").with(i);
+                // 用上一帧的 hover 状态决定本帧背景色（egui 惯用技巧）
+                let hovered = ui
+                    .ctx()
+                    .read_response(row_id)
+                    .is_some_and(|r| r.hovered());
+
+                // 当前曲：主题色低透明度 + 强调色文字；悬停：浅色底
+                let accent = ui.visuals().selection.bg_fill;
+                let fill = if is_current {
+                    egui::Color32::from_rgba_unmultiplied(accent.r(), accent.g(), accent.b(), 32)
+                } else if hovered {
+                    ui.visuals().widgets.hovered.weak_bg_fill
+                } else {
+                    egui::Color32::TRANSPARENT
+                };
+
                 let row = egui::Frame::NONE
-                    .fill(if is_current {
-                        ui.visuals().selection.bg_fill
-                    } else {
-                        egui::Color32::TRANSPARENT
-                    })
-                    .inner_margin(egui::Margin::symmetric(6, 4))
+                    .fill(fill)
+                    .corner_radius(4)
+                    .inner_margin(egui::Margin::symmetric(10, 7))
                     .show(ui, |ui| {
                         ui.horizontal(|ui| {
                             // 序号 / 播放指示
-                            let indicator = if is_current { "▶" } else { "" };
-                            ui.label(
-                                egui::RichText::new(format!("{:>3} {}", i + 1, indicator))
+                            let idx = if is_current {
+                                egui::RichText::new("▶")
+                                    .size(12.0)
+                                    .color(accent)
+                                    .monospace()
+                            } else {
+                                egui::RichText::new(format!("{: >3}", i + 1))
                                     .weak()
-                                    .monospace(),
-                            );
-                            let title_text = if is_current {
-                                egui::RichText::new(&track.title).strong()
+                                    .monospace()
+                            };
+                            ui.add_sized([30.0, 18.0], egui::Label::new(idx));
+
+                            // 标题
+                            let title = if is_current {
+                                egui::RichText::new(&track.title).strong().color(accent)
                             } else {
                                 egui::RichText::new(&track.title)
                             };
-                            let resp = ui.selectable_label(is_current, title_text);
-                            if resp.double_clicked() {
-                                play_index = Some(i);
-                            }
+                            ui.label(title);
+
+                            // 艺术家
                             if !track.artist.is_empty() {
-                                ui.weak(format!("— {}", track.artist));
+                                ui.label(egui::RichText::new(track.artist.clone()).weak());
                             }
+
+                            // 右侧时长
                             ui.with_layout(
                                 egui::Layout::right_to_left(egui::Align::Center),
                                 |ui| {
-                                    if ui
-                                        .small_button("✕")
-                                        .on_hover_text("移除")
-                                        .clicked()
-                                    {
-                                        remove_index = Some(i);
-                                    }
-                                    let dur = super::format_duration(track.duration);
-                                    ui.label(egui::RichText::new(dur).weak().monospace());
+                                    ui.label(
+                                        egui::RichText::new(super::format_duration(track.duration))
+                                            .weak()
+                                            .monospace(),
+                                    );
                                 },
                             );
                         });
                     });
-                // 整行双击也可播放（点击行内空白区域）
-                if row.response.double_clicked() {
+
+                // 整行交互：双击播放、右键菜单（覆盖在行矩形上的透明 hit-test）
+                let hit = ui.interact(row.response.rect, row_id, egui::Sense::click());
+                if hit.hovered() {
+                    ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
+                }
+                if hit.double_clicked() {
                     play_index = Some(i);
                 }
+                hit.context_menu(|ui| {
+                    if ui.button("▶ 播放").clicked() {
+                        play_index = Some(i);
+                        ui.close();
+                    }
+                    if ui
+                        .button(
+                            egui::RichText::new("移除")
+                                .color(egui::Color32::from_rgb(220, 90, 90)),
+                        )
+                        .clicked()
+                    {
+                        remove_index = Some(i);
+                        ui.close();
+                    }
+                });
             }
         });
 
     ui.separator();
-    ui.weak(format!("共 {} 首", app.playlist.len()));
+    ui.weak(format!(
+        "共 {} 首 · 双击播放 · 右键更多操作",
+        app.playlist.len()
+    ));
 
     if let Some(i) = play_index {
         app.play_index(i, ctx);
