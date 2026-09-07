@@ -17,8 +17,8 @@ fn main() -> eframe::Result {
 
     let options = eframe::NativeOptions {
         viewport: eframe::egui::ViewportBuilder::default()
-            .with_inner_size([960.0, 640.0])
-            .with_min_inner_size([640.0, 420.0])
+            .with_inner_size([1200.0, 700.0])
+            .with_min_inner_size([820.0, 500.0])
             .with_title("Music Player 音乐播放器"),
         ..Default::default()
     };

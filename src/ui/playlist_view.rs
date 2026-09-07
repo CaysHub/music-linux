@@ -1,4 +1,4 @@
-//! 播放列表视图：双击播放、当前曲柔和高亮、右键菜单（播放/移除）
+//! 播放列表视图：双击播放、当前曲柔和高亮、行尾常驻移除按钮
 
 use eframe::egui;
 
@@ -9,7 +9,7 @@ pub fn draw(app: &mut MusicApp, ui: &mut egui::Ui, ctx: &egui::Context) {
         ui.vertical_centered(|ui| {
             ui.add_space(ui.available_height() * 0.4);
             ui.weak("播放列表为空");
-            ui.weak("使用下方「添加文件 / 添加文件夹」按钮导入音乐");
+            ui.weak("使用上方「添加文件 / 添加文件夹」按钮导入音乐");
         });
         return;
     }
@@ -64,17 +64,18 @@ pub fn draw(app: &mut MusicApp, ui: &mut egui::Ui, ctx: &egui::Context) {
                             } else {
                                 egui::RichText::new(&track.title)
                             };
-                            ui.label(title);
+                            ui.add(egui::Label::new(title).truncate());
 
                             // 艺术家
                             if !track.artist.is_empty() {
                                 ui.label(egui::RichText::new(track.artist.clone()).weak());
                             }
 
-                            // 右侧时长
+                            // 右侧：时长 + 移除按钮
                             ui.with_layout(
                                 egui::Layout::right_to_left(egui::Align::Center),
                                 |ui| {
+                                    remove_button(ui, &mut remove_index, i);
                                     ui.label(
                                         egui::RichText::new(super::format_duration(track.duration))
                                             .weak()
@@ -113,15 +114,58 @@ pub fn draw(app: &mut MusicApp, ui: &mut egui::Ui, ctx: &egui::Context) {
         });
 
     ui.separator();
-    ui.weak(format!(
-        "共 {} 首 · 双击播放 · 右键更多操作",
-        app.playlist.len()
-    ));
+    ui.horizontal(|ui| {
+        ui.weak(format!(
+            "共 {} 首 · 双击播放 · 右键更多操作",
+            app.playlist.len()
+        ));
+        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            if ui
+                .button(egui::RichText::new("清空列表").color(egui::Color32::from_rgb(220, 90, 90)))
+                .on_hover_text("清空播放列表")
+                .clicked()
+            {
+                app.clear_playlist();
+            }
+        });
+    });
 
     if let Some(i) = play_index {
         app.play_index(i, ctx);
     }
     if let Some(i) = remove_index {
         app.remove_track(i);
+    }
+}
+
+/// 行尾移除按钮：自绘居中 ✕，平时低调灰色，悬停变红
+fn remove_button(ui: &mut egui::Ui, remove_index: &mut Option<usize>, i: usize) {
+    let (rect, resp) = ui.allocate_exact_size(egui::vec2(24.0, 20.0), egui::Sense::click());
+    let hovered = resp.hovered();
+    if hovered {
+        ui.painter().rect(
+            rect,
+            egui::CornerRadius::same(4),
+            egui::Color32::from_rgba_unmultiplied(220, 90, 90, 40),
+            egui::Stroke::NONE,
+            egui::StrokeKind::Inside,
+        );
+    }
+    let color = if hovered {
+        egui::Color32::from_rgb(225, 100, 100)
+    } else {
+        ui.visuals().widgets.inactive.fg_stroke.color
+    };
+    ui.painter().text(
+        rect.center(),
+        egui::Align2::CENTER_CENTER,
+        "✕",
+        egui::FontId::proportional(11.0),
+        color,
+    );
+    let clicked = resp.clicked();
+    resp.on_hover_cursor(egui::CursorIcon::PointingHand);
+    if clicked {
+        *remove_index = Some(i);
     }
 }
