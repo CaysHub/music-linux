@@ -64,7 +64,7 @@ impl MusicApp {
             .filter(|&i| i < playlist.tracks.len());
 
         let dark_mode = true;
-        cc.egui_ctx.set_visuals(egui::Visuals::dark());
+        crate::ui::set_app_theme(&cc.egui_ctx, dark_mode);
 
         let error = engine
             .is_none()
@@ -357,6 +357,10 @@ fn setup_fonts(ctx: &egui::Context) {
 }
 
 impl eframe::App for MusicApp {
+    fn clear_color(&self, _visuals: &egui::Visuals) -> [f32; 4] {
+        crate::ui::app_background(self.dark_mode).to_normalized_gamma_f32()
+    }
+
     /// 每帧逻辑（窗口隐藏时也会被调用，适合自动切歌与重绘调度）
     fn logic(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         // 自动切歌（帧循环轮询，播放中本来就需要刷新进度/歌词）

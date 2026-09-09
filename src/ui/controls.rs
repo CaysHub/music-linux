@@ -14,9 +14,9 @@ use crate::playlist::PlayMode;
 /// 时间标签固定宽度（等宽字体 h:mm:ss）
 const TIME_W: f32 = 52.0;
 /// 音量滑块宽度
-const VOL_W: f32 = 70.0;
+const VOL_W: f32 = 82.0;
 /// 进度条之后所有内容的预留宽度（右侧时间 + 音量图标 + 音量条 + 间距 + 余量）
-const TAIL_W: f32 = 200.0;
+const TAIL_W: f32 = 220.0;
 
 fn mode_icon(mode: PlayMode) -> egui_material_icons::MaterialIcon {
     match mode {
@@ -28,7 +28,7 @@ fn mode_icon(mode: PlayMode) -> egui_material_icons::MaterialIcon {
 }
 
 pub fn draw(app: &mut MusicApp, ui: &mut egui::Ui, ctx: &egui::Context) {
-    ui.horizontal(|ui| {
+    ui.horizontal_centered(|ui| {
         let playing = app
             .engine
             .as_ref()
@@ -42,18 +42,30 @@ pub fn draw(app: &mut MusicApp, ui: &mut egui::Ui, ctx: &egui::Context) {
         let icon_btn = |ui: &mut egui::Ui,
                         icon: egui_material_icons::MaterialIcon,
                         size: f32,
+                        y_offset: f32,
                         tip: &str| {
-            ui.add(
+            let (_, slot_rect) = ui.allocate_space(egui::vec2(36.0, 32.0));
+            ui.place(
+                slot_rect.translate(egui::vec2(0.0, y_offset)),
                 egui::Button::new(icon.rich_text().size(size))
-                    .min_size(egui::vec2(34.0, 30.0)),
+                    .min_size(egui::vec2(36.0, 32.0))
+                    .corner_radius(egui::CornerRadius::same(6)),
             )
             .on_hover_text(tip)
         };
-        if icon_btn(ui, ICON_SKIP_PREVIOUS, 20.0, "上一曲").clicked() {
+        if icon_btn(ui, ICON_SKIP_PREVIOUS, 21.0, 0.0, "上一曲").clicked() {
             app.prev(ctx);
         }
         let play_icon = if playing { ICON_PAUSE } else { ICON_PLAY_ARROW };
-        if icon_btn(ui, play_icon, 24.0, if playing { "暂停" } else { "播放" }).clicked() {
+        if icon_btn(
+            ui,
+            play_icon,
+            25.0,
+            -3.0,
+            if playing { "暂停" } else { "播放" },
+        )
+        .clicked()
+        {
             if paused {
                 if let Some(engine) = app.engine.as_mut() {
                     engine.resume();
@@ -62,10 +74,10 @@ pub fn draw(app: &mut MusicApp, ui: &mut egui::Ui, ctx: &egui::Context) {
                 app.toggle_play(ctx);
             }
         }
-        if icon_btn(ui, ICON_STOP, 20.0, "停止").clicked() {
+        if icon_btn(ui, ICON_STOP, 21.0, 0.0, "停止").clicked() {
             app.stop_all();
         }
-        if icon_btn(ui, ICON_SKIP_NEXT, 20.0, "下一曲").clicked() {
+        if icon_btn(ui, ICON_SKIP_NEXT, 21.0, 0.0, "下一曲").clicked() {
             app.next(true, ctx);
         }
 
@@ -74,13 +86,11 @@ pub fn draw(app: &mut MusicApp, ui: &mut egui::Ui, ctx: &egui::Context) {
         let mode = app.playlist.mode;
         let mode_btn = egui::Button::new(
             egui::RichText::new(format!("{} {}", mode_icon(mode).codepoint, mode.label()))
-                .size(13.0),
-        );
-        if ui
-            .add(mode_btn)
-            .on_hover_text("点击切换播放模式")
-            .clicked()
-        {
+                .size(14.0),
+        )
+        .min_size(egui::vec2(98.0, 32.0))
+        .corner_radius(egui::CornerRadius::same(6));
+        if ui.add(mode_btn).on_hover_text("点击切换播放模式").clicked() {
             app.cycle_play_mode();
         }
 
@@ -96,7 +106,8 @@ pub fn draw(app: &mut MusicApp, ui: &mut egui::Ui, ctx: &egui::Context) {
         let time_label = |ui: &mut egui::Ui, text: String, align: egui::Align| {
             ui.add_sized(
                 [TIME_W, 18.0],
-                egui::Label::new(egui::RichText::new(text).monospace().weak()).halign(align),
+                egui::Label::new(egui::RichText::new(text).monospace().weak().size(13.5))
+                    .halign(align),
             )
         };
 
@@ -135,7 +146,7 @@ pub fn draw(app: &mut MusicApp, ui: &mut egui::Ui, ctx: &egui::Context) {
             } else {
                 ICON_VOLUME_UP
             };
-            ui.add(egui::Label::new(vol_icon.rich_text().size(17.0)).selectable(false));
+            ui.add(egui::Label::new(vol_icon.rich_text().size(19.0)).selectable(false));
         });
     });
 }

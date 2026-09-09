@@ -19,6 +19,7 @@ fn main() -> eframe::Result {
         viewport: eframe::egui::ViewportBuilder::default()
             .with_inner_size([1200.0, 700.0])
             .with_min_inner_size([820.0, 500.0])
+            .with_transparent(false)
             .with_title("Music Player 音乐播放器"),
         ..Default::default()
     };

@@ -9,13 +9,12 @@ pub fn draw(app: &mut MusicApp, ui: &mut egui::Ui) {
     ui.horizontal(|ui| {
         // ---------- 左：当前曲目 ----------
         ui.add(egui::Label::new(
-            ICON_MUSIC_NOTE.rich_text().size(15.0).strong(),
+            ICON_MUSIC_NOTE.rich_text().size(18.0).strong(),
         ));
         match app.current_track() {
             Some(t) => {
                 ui.add(
-                    egui::Label::new(egui::RichText::new(&t.title).strong().size(15.0))
-                        .truncate(),
+                    egui::Label::new(egui::RichText::new(&t.title).strong().size(16.0)).truncate(),
                 );
                 if !t.artist.is_empty() {
                     ui.weak(&t.artist);
@@ -25,21 +24,23 @@ pub fn draw(app: &mut MusicApp, ui: &mut egui::Ui) {
                 }
             }
             None => {
-                ui.weak(egui::RichText::new("未播放").size(15.0));
+                ui.weak(egui::RichText::new("未播放").size(16.0));
             }
         }
 
         // ---------- 右：工具栏 ----------
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
             if ui
-                .button(format!("{} 添加文件", ICON_ADD.codepoint))
+                .add(toolbar_button(format!("{} 添加文件", ICON_ADD.codepoint)))
                 .on_hover_text("添加音频文件")
                 .clicked()
             {
                 let files = rfd::FileDialog::new()
                     .add_filter(
                         "音频文件",
-                        &["mp3", "flac", "ogg", "oga", "opus", "wav", "m4a", "aac", "aiff"],
+                        &[
+                            "mp3", "flac", "ogg", "oga", "opus", "wav", "m4a", "aac", "aiff",
+                        ],
                     )
                     .pick_files();
                 if let Some(files) = files {
@@ -47,7 +48,10 @@ pub fn draw(app: &mut MusicApp, ui: &mut egui::Ui) {
                 }
             }
             if ui
-                .button(format!("{} 添加文件夹", ICON_FOLDER_OPEN.codepoint))
+                .add(toolbar_button(format!(
+                    "{} 添加文件夹",
+                    ICON_FOLDER_OPEN.codepoint
+                )))
                 .on_hover_text("递归添加文件夹内音频")
                 .clicked()
             {
@@ -57,7 +61,10 @@ pub fn draw(app: &mut MusicApp, ui: &mut egui::Ui) {
             }
             ui.separator();
             if ui
-                .button(format!("{} 打开列表", ICON_FILE_OPEN.codepoint))
+                .add(toolbar_button(format!(
+                    "{} 打开列表",
+                    ICON_FILE_OPEN.codepoint
+                )))
                 .on_hover_text("加载 m3u/m3u8 播放列表")
                 .clicked()
             {
@@ -69,7 +76,7 @@ pub fn draw(app: &mut MusicApp, ui: &mut egui::Ui) {
                 }
             }
             if ui
-                .button(format!("{} 保存列表", ICON_SAVE.codepoint))
+                .add(toolbar_button(format!("{} 保存列表", ICON_SAVE.codepoint)))
                 .on_hover_text("保存为 m3u8")
                 .clicked()
             {
@@ -83,4 +90,10 @@ pub fn draw(app: &mut MusicApp, ui: &mut egui::Ui) {
             }
         });
     });
+}
+
+fn toolbar_button(text: String) -> egui::Button<'static> {
+    egui::Button::new(egui::RichText::new(text).size(14.0))
+        .min_size(egui::vec2(92.0, 30.0))
+        .corner_radius(egui::CornerRadius::same(6))
 }
