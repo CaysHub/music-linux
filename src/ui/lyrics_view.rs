@@ -1,6 +1,7 @@
 //! 歌词视图：当前行高亮放大、自动滚动居中（用户手动滚动后暂停跟随）、点击行跳转播放
 
 use eframe::egui;
+use egui_material_icons::icons::*;
 
 use crate::app::MusicApp;
 
@@ -10,13 +11,175 @@ const RECENT_FADE_SECS: f32 = 6.0;
 const LAST_LINE_FALLBACK_SECS: f32 = 4.0;
 
 pub fn draw(app: &mut MusicApp, ui: &mut egui::Ui, ctx: &egui::Context) {
+    if app.lyrics_editor.is_some() {
+        draw_editor(app, ui, ctx);
+    } else {
+        draw_lyrics(app, ui, ctx);
+    }
+}
+
+fn draw_editor(app: &mut MusicApp, ui: &mut egui::Ui, ctx: &egui::Context) {
+    let Some(editor) = app.lyrics_editor.as_ref() else {
+        return;
+    };
+    let title = editor.track_title.clone();
+    let is_dirty = editor.is_dirty();
+    let timeline_count = crate::lyrics::parse_str(&editor.text)
+        .map(|lyrics| lyrics.lines.len())
+        .unwrap_or(0);
+    let position = app.display_position_secs();
+    let mut cancel_requested = false;
+    let mut save_requested = ctx.input_mut(|input| {
+        input.consume_shortcut(&egui::KeyboardShortcut::new(
+            egui::Modifiers::COMMAND,
+            egui::Key::S,
+        ))
+    });
+    let mut insert_time_requested = false;
+
+    ui.horizontal(|ui| {
+        let actions_width = 176.0;
+        let title_width = (ui.available_width() - actions_width).max(80.0);
+        ui.allocate_ui_with_layout(
+            egui::vec2(title_width, 32.0),
+            egui::Layout::left_to_right(egui::Align::Center),
+            |ui| {
+                ui.label(egui::RichText::new(ICON_EDIT_NOTE).size(22.0));
+                ui.add(
+                    egui::Label::new(egui::RichText::new(format!("编辑歌词 · {title}")).strong())
+                        .truncate(),
+                );
+                if is_dirty {
+                    ui.label(egui::RichText::new("未保存").small().weak());
+                }
+            },
+        );
+        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            if ui
+                .add_enabled(
+                    timeline_count > 0,
+                    egui::Button::new(format!("{} 保存", ICON_SAVE.codepoint))
+                        .min_size(egui::vec2(82.0, 32.0)),
+                )
+                .on_hover_text("保存为 UTF-8 编码的同名 LRC 文件（Ctrl+S）")
+                .clicked()
+            {
+                save_requested = true;
+            }
+            if ui
+                .add(
+                    egui::Button::new(format!("{} 取消", ICON_CLOSE.codepoint))
+                        .min_size(egui::vec2(82.0, 32.0)),
+                )
+                .clicked()
+            {
+                cancel_requested = true;
+            }
+        });
+    });
+
+    ui.horizontal(|ui| {
+        let insert_width = 132.0;
+        let status_width = (ui.available_width() - insert_width).max(80.0);
+        ui.allocate_ui_with_layout(
+            egui::vec2(status_width, 28.0),
+            egui::Layout::left_to_right(egui::Align::Center),
+            |ui| {
+                let status = if timeline_count > 0 {
+                    format!("已识别 {timeline_count} 行时间轴")
+                } else {
+                    "未检测到有效时间轴".to_string()
+                };
+                let color = if timeline_count > 0 {
+                    ui.visuals().selection.bg_fill
+                } else {
+                    ui.visuals().warn_fg_color
+                };
+                ui.label(egui::RichText::new(status).small().color(color));
+            },
+        );
+        if ui
+            .add(
+                egui::Button::new(format!("{} 插入当前时间", ICON_SCHEDULE.codepoint))
+                    .min_size(egui::vec2(insert_width, 28.0)),
+            )
+            .on_hover_text("在文本末尾插入当前播放位置的时间标签")
+            .clicked()
+        {
+            insert_time_requested = true;
+        }
+    });
+
+    ui.separator();
+
+    if insert_time_requested {
+        if let Some(editor) = app.lyrics_editor.as_mut() {
+            append_timestamp(&mut editor.text, position);
+            editor.error = None;
+        }
+    }
+
+    let editor_error = app
+        .lyrics_editor
+        .as_ref()
+        .and_then(|editor| editor.error.clone());
+    if let Some(error) = editor_error {
+        ui.label(egui::RichText::new(error).color(ui.visuals().error_fg_color));
+    }
+
+    if let Some(editor) = app.lyrics_editor.as_mut() {
+        let response = ui.add_sized(
+            [ui.available_width(), ui.available_height()],
+            egui::TextEdit::multiline(&mut editor.text)
+                .code_editor()
+                .desired_width(f32::INFINITY)
+                .hint_text("[00:00.00]歌词"),
+        );
+        if response.changed() {
+            editor.error = None;
+        }
+    }
+
+    if cancel_requested {
+        app.cancel_lyrics_edit();
+    } else if save_requested {
+        let is_valid = app
+            .lyrics_editor
+            .as_ref()
+            .is_some_and(|editor| crate::lyrics::parse_str(&editor.text).is_some());
+        if !is_valid {
+            if let Some(editor) = app.lyrics_editor.as_mut() {
+                editor.error = Some("未检测到有效时间轴，请使用 [mm:ss.xx]歌词 格式".into());
+            }
+        } else if let Err(error) = app.save_lyrics_edit() {
+            if let Some(editor) = app.lyrics_editor.as_mut() {
+                editor.error = Some(error);
+            }
+        }
+    }
+}
+
+fn append_timestamp(text: &mut String, seconds: f64) {
+    if !text.is_empty() && !text.ends_with('\n') {
+        text.push('\n');
+    }
+    text.push_str(&format_lrc_timestamp(seconds));
+}
+
+fn format_lrc_timestamp(seconds: f64) -> String {
+    let centiseconds = (seconds.max(0.0) * 100.0).round() as u64;
+    let minutes = centiseconds / 6_000;
+    let seconds = (centiseconds / 100) % 60;
+    let fraction = centiseconds % 100;
+    format!("[{minutes:02}:{seconds:02}.{fraction:02}]")
+}
+
+fn draw_lyrics(app: &mut MusicApp, ui: &mut egui::Ui, ctx: &egui::Context) {
     let Some(lyrics) = app.lyrics.clone() else {
         ui.vertical_centered(|ui| {
             ui.add_space(ui.available_height() * 0.4);
             ui.label(egui::RichText::new("无歌词").size(16.0).weak());
-            ui.label(
-                egui::RichText::new("将 .lrc 文件与音频文件放在同一目录并同名即可自动加载").weak(),
-            );
+            ui.label(egui::RichText::new("可通过标签栏新建歌词").weak());
         });
         return;
     };
@@ -153,4 +316,23 @@ fn mix_color(a: egui::Color32, b: egui::Color32, t: f32) -> egui::Color32 {
     let t = t.clamp(0.0, 1.0);
     let mix = |x: u8, y: u8| (x as f32 + (y as f32 - x as f32) * t).round() as u8;
     egui::Color32::from_rgb(mix(a.r(), b.r()), mix(a.g(), b.g()), mix(a.b(), b.b()))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn formats_lrc_timestamp() {
+        assert_eq!(format_lrc_timestamp(0.0), "[00:00.00]");
+        assert_eq!(format_lrc_timestamp(65.439), "[01:05.44]");
+        assert_eq!(format_lrc_timestamp(6_005.0), "[100:05.00]");
+    }
+
+    #[test]
+    fn appends_timestamp_on_a_new_line() {
+        let mut text = "[ti:Song]".to_string();
+        append_timestamp(&mut text, 1.25);
+        assert_eq!(text, "[ti:Song]\n[00:01.25]");
+    }
 }

@@ -53,7 +53,7 @@ pub struct Track {
 }
 
 impl Track {
-    /// 不读标签的占位构造（测试 / m3u 加载阶段使用，之后由后台回填）
+    /// 标签读取前的占位构造（导入和测试使用）
     pub fn stub(path: PathBuf) -> Self {
         let title = path
             .file_stem()
@@ -73,7 +73,23 @@ impl Track {
 pub fn is_supported_audio(path: &std::path::Path) -> bool {
     path.extension()
         .map(|e| e.to_string_lossy().to_ascii_lowercase())
-        .is_some_and(|e| matches!(e.as_str(), "mp3" | "flac" | "ogg" | "oga" | "opus" | "wav" | "wave" | "m4a" | "mp4" | "aac" | "aiff" | "aif"))
+        .is_some_and(|e| {
+            matches!(
+                e.as_str(),
+                "mp3"
+                    | "flac"
+                    | "ogg"
+                    | "oga"
+                    | "opus"
+                    | "wav"
+                    | "wave"
+                    | "m4a"
+                    | "mp4"
+                    | "aac"
+                    | "aiff"
+                    | "aif"
+            )
+        })
 }
 
 pub struct Playlist {

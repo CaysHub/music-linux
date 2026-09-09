@@ -3,12 +3,13 @@
 mod controls;
 mod info_bar;
 mod lyrics_view;
+mod mini_player;
 mod playlist_view;
 
 use eframe::egui;
 use egui_material_icons::icons::*;
 
-use crate::app::{MainTab, MusicApp};
+use crate::app::{MainTab, MusicApp, PendingPlaylistAction};
 
 const RED: egui::Color32 = egui::Color32::from_rgb(225, 95, 95);
 const TOP_BAR_HEIGHT: f32 = 52.0;
@@ -156,6 +157,11 @@ fn app_visuals(dark_mode: bool) -> egui::Visuals {
 
 pub fn draw(app: &mut MusicApp, ui: &mut egui::Ui) {
     let ctx = ui.ctx().clone();
+    if app.mini_mode {
+        mini_player::draw(app, ui, &ctx);
+        return;
+    }
+
     ui.painter().rect_filled(
         ui.max_rect(),
         egui::CornerRadius::ZERO,
@@ -252,6 +258,43 @@ pub fn draw(app: &mut MusicApp, ui: &mut egui::Ui) {
                     app.tab = MainTab::Lyrics;
                 }
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    if app.tab == MainTab::Lyrics {
+                        let track = app.current_track().cloned();
+                        let lrc_path = if let Some(editor) = app.lyrics_editor.as_ref() {
+                            Some(editor.lrc_path.clone())
+                        } else {
+                            track
+                                .as_ref()
+                                .map(|track| crate::lyrics::sidecar_path(&track.path))
+                        };
+
+                        if app.lyrics_editor.is_none() {
+                            let has_lrc = lrc_path.as_ref().is_some_and(|path| path.is_file());
+                            let action = if has_lrc {
+                                format!("{} 编辑歌词", ICON_EDIT_NOTE.codepoint)
+                            } else {
+                                format!("{} 新建歌词", ICON_ADD_NOTES.codepoint)
+                            };
+                            if ui
+                                .add_enabled(track.is_some(), egui::Button::new(action))
+                                .clicked()
+                            {
+                                if let Err(error) = app.begin_lyrics_edit() {
+                                    app.error = Some(error);
+                                }
+                            }
+                        }
+
+                        if let Some(path) = lrc_path {
+                            let path = path.display().to_string();
+                            ui.add_sized(
+                                [ui.available_width().min(360.0), 28.0],
+                                egui::Label::new(egui::RichText::new(&path).small().weak())
+                                    .truncate(),
+                            )
+                            .on_hover_text(path);
+                        }
+                    }
                     if app.tab == MainTab::Playlist && !app.playlist.is_empty() {
                         if ui
                             .add(
@@ -267,25 +310,9 @@ pub fn draw(app: &mut MusicApp, ui: &mut egui::Ui) {
                             )
                             .clicked()
                         {
-                            app.clear_playlist();
+                            app.pending_playlist_action = Some(PendingPlaylistAction::Clear);
                         }
                         ui.add_space(4.0);
-                    }
-                    let (icon, text) = if app.dark_mode {
-                        (ICON_LIGHT_MODE, "浅色")
-                    } else {
-                        (ICON_DARK_MODE, "深色")
-                    };
-                    if ui
-                        .add(
-                            egui::Button::new(format!("{} {text}", icon.codepoint))
-                                .corner_radius(egui::CornerRadius::same(6)),
-                        )
-                        .on_hover_text("切换明暗主题")
-                        .clicked()
-                    {
-                        app.dark_mode = !app.dark_mode;
-                        set_app_theme(&ctx, app.dark_mode);
                     }
                 });
             });
@@ -296,6 +323,79 @@ pub fn draw(app: &mut MusicApp, ui: &mut egui::Ui) {
                 MainTab::Lyrics => lyrics_view::draw(app, ui, &ctx),
             }
         });
+
+    draw_playlist_confirmation(app, &ctx);
+}
+
+fn draw_playlist_confirmation(app: &mut MusicApp, ctx: &egui::Context) {
+    let Some(action) = app.pending_playlist_action.clone() else {
+        return;
+    };
+
+    let confirmation =
+        egui::Modal::new(egui::Id::new("playlist_action_confirmation")).show(ctx, |ui| {
+            ui.set_width(360.0);
+
+            let (heading, detail, confirm_label) = match &action {
+                PendingPlaylistAction::Remove { title, .. } => (
+                    "移除歌曲？",
+                    format!("“{title}”将从当前播放列表中移除。"),
+                    "确认移除",
+                ),
+                PendingPlaylistAction::Clear => (
+                    "清空播放列表？",
+                    format!(
+                        "列表中的 {} 首歌曲将全部移除，当前播放也会停止。",
+                        app.playlist.len()
+                    ),
+                    "确认清空",
+                ),
+            };
+
+            ui.heading(heading);
+            ui.add_space(8.0);
+            ui.add(egui::Label::new(detail).wrap());
+            ui.add_space(18.0);
+
+            let mut confirmed = false;
+            let mut cancelled = false;
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                confirmed = ui
+                    .add(
+                        egui::Button::new(
+                            egui::RichText::new(format!(
+                                "{} {confirm_label}",
+                                ICON_DELETE.codepoint
+                            ))
+                            .color(RED),
+                        )
+                        .min_size(egui::vec2(96.0, 32.0))
+                        .corner_radius(egui::CornerRadius::same(6)),
+                    )
+                    .clicked();
+                cancelled = ui
+                    .add(
+                        egui::Button::new("取消")
+                            .min_size(egui::vec2(72.0, 32.0))
+                            .corner_radius(egui::CornerRadius::same(6)),
+                    )
+                    .clicked();
+            });
+
+            (confirmed, cancelled)
+        });
+
+    let should_close = confirmation.should_close();
+    let (confirmed, cancelled) = confirmation.inner;
+    if confirmed {
+        app.pending_playlist_action = None;
+        match action {
+            PendingPlaylistAction::Remove { index, .. } => app.remove_track(index),
+            PendingPlaylistAction::Clear => app.clear_playlist(),
+        }
+    } else if cancelled || should_close {
+        app.pending_playlist_action = None;
+    }
 }
 
 /// mm:ss（超过一小时则 h:mm:ss）

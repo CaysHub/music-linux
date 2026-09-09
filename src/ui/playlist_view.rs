@@ -3,7 +3,7 @@
 use eframe::egui;
 use egui_material_icons::icons::*;
 
-use crate::app::MusicApp;
+use crate::app::{MusicApp, PendingPlaylistAction};
 use crate::audio::PlaybackState;
 
 const RED: egui::Color32 = egui::Color32::from_rgb(225, 95, 95);
@@ -193,7 +193,12 @@ pub fn draw(app: &mut MusicApp, ui: &mut egui::Ui, ctx: &egui::Context) {
         app.play_index(i, ctx);
     }
     if let Some(i) = remove_index {
-        app.remove_track(i);
+        if let Some(track) = app.playlist.tracks.get(i) {
+            app.pending_playlist_action = Some(PendingPlaylistAction::Remove {
+                index: i,
+                title: track.title.clone(),
+            });
+        }
     }
 }
 

@@ -10,7 +10,7 @@
 | 图标 | egui_material_icons | 0.8 | Material Symbols 字体，egui 0.36 兼容 |
 | 文件对话框 | rfd | 0.17 | xdg-portal 后端，构建期无需 GTK |
 | 序列化 | serde + serde_json | 1 | 配置持久化 |
-| 编码容错 | encoding_rs | 0.8 | GBK ↔ UTF-8（中文 LRC/m3u 常见 GBK） |
+| 编码容错 | encoding_rs | 0.8 | GBK ↔ UTF-8（中文 LRC 常见 GBK） |
 | 路径 | dirs | 6 | `~/.config` 定位 |
 
 ## 模块划分
@@ -23,13 +23,12 @@ src/
 ├── playlist.rs    # Track/Playlist/PlayMode + 切曲策略（纯逻辑，单测）
 ├── tags.rs        # lofty 标签读取 + rodio 时长探测回退
 ├── lyrics/        # LRC 解析（纯函数，单测）+ active_line 二分查找
-├── m3u.rs         # m3u/m3u8 读写（纯函数，单测）
 ├── config.rs      # AppConfig → ~/.config/music-linux/config.json
 └── ui/            # info_bar / playlist_view / lyrics_view / controls
 ```
 
-依赖方向：`ui → app → {audio, playlist, tags, lyrics, m3u, config}`。
-playlist / lyrics / m3u 不依赖 egui 与音频，可独立测试。
+依赖方向：`ui → app → {audio, playlist, tags, lyrics, config}`。
+playlist / lyrics 不依赖 egui 与音频，可独立测试。
 
 ## 线程模型（本方案最大优点）
 
@@ -46,6 +45,8 @@ pub struct MusicApp {
     engine: Option<AudioEngine>,   // None = 无音频设备（UI 仍可用）
     playlist: Playlist,            // 曲目 + current + PlayMode + 洗牌袋
     lyrics: Option<Lyrics>,        // 当前曲歌词（播曲时加载）
+    lyrics_editor: Option<LyricsEditor>, // 绑定音频路径的歌词编辑草稿
+    mini_mode: bool,              // 根窗口是否处于置顶双行模式
     volume: f32,
     tab: MainTab,                  // 播放列表 / 歌词
     seek_drag: Option<f64>,        // 进度条拖动预览
@@ -55,6 +56,7 @@ pub struct MusicApp {
 ```
 
 `engine` 用 `Option` 而非 panic：无音频设备时窗口照常打开，操作时提示错误。
+`lyrics_editor` 保存开始编辑时的音频与 LRC 路径，避免编辑期间切歌导致写错文件。
 
 ## 播放动作流
 

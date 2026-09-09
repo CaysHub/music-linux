@@ -51,21 +51,6 @@ Fisher-Yates，不引依赖）。只有一首歌时返回当前索引。
 `remove(index)`：`current > index` 时减一；移除当前曲时 `current = None`，
 由调用方决定停止或切歌。洗牌袋索引随之失效，简单起见直接清空（MVP 取舍）。
 
-## m3u / m3u8 格式（手写，约 60 行）
-
-参考 MusicPlayer2 的 Playlist.cpp：
-
-- **保存**：一律 m3u8（UTF-8），首行 `#EXTM3U`，每曲
-  `#EXTINF:<秒>,<艺术家> - <标题>` + 绝对路径
-- **加载**：兼容 m3u（GBK 回退）与 m3u8；忽略 `#` 开头行；相对路径基于 m3u
-  文件所在目录解析
-
-```
-#EXTM3U
-#EXTINF:246,艺术家 - 歌曲名
-/home/user/Music/歌曲名.mp3
-```
-
 ## 文件夹导入
 
 递归遍历 + 扩展名白名单：

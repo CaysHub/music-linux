@@ -14,7 +14,6 @@ pub struct AppConfig {
     /// 上次会话打开的曲目路径（用于恢复列表）
     pub open_tracks: Vec<PathBuf>,
     pub last_index: Option<usize>,
-    pub last_playlist_path: Option<PathBuf>,
 }
 
 impl Default for AppConfig {
@@ -24,7 +23,6 @@ impl Default for AppConfig {
             play_mode: PlayMode::RepeatAll,
             open_tracks: Vec::new(),
             last_index: None,
-            last_playlist_path: None,
         }
     }
 }
@@ -45,7 +43,9 @@ impl AppConfig {
     }
 
     pub fn save(&self) {
-        let Some(path) = Self::config_path() else { return };
+        let Some(path) = Self::config_path() else {
+            return;
+        };
         if let Some(dir) = path.parent() {
             let _ = std::fs::create_dir_all(dir);
         }

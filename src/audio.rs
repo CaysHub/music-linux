@@ -31,8 +31,8 @@ pub struct AudioEngine {
 
 impl AudioEngine {
     pub fn new() -> Result<Self, String> {
-        let device = DeviceSinkBuilder::open_default_sink()
-            .map_err(|e| format!("无法打开音频设备: {e}"))?;
+        let device =
+            DeviceSinkBuilder::open_default_sink().map_err(|e| format!("无法打开音频设备: {e}"))?;
         let player = Player::connect_new(&device.mixer());
         Ok(Self {
             _device: device,
@@ -44,8 +44,7 @@ impl AudioEngine {
 
     /// 播放一个文件（先解码校验，成功后才切换）
     pub fn play_file(&mut self, path: &Path) -> Result<(), String> {
-        let file =
-            File::open(path).map_err(|e| format!("无法打开文件 {}: {e}", path.display()))?;
+        let file = File::open(path).map_err(|e| format!("无法打开文件 {}: {e}", path.display()))?;
         let src =
             Decoder::try_from(file).map_err(|e| format!("无法解码 {}: {e}", path.display()))?;
         self.player.stop();

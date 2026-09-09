@@ -1,4 +1,4 @@
-//! 顶部信息栏：当前曲目信息（左） + 文件操作工具栏（右）
+//! 顶部信息栏：当前曲目信息（左） + 文件操作和主题工具栏（右）
 
 use eframe::egui;
 use egui_material_icons::icons::*;
@@ -6,6 +6,7 @@ use egui_material_icons::icons::*;
 use crate::app::MusicApp;
 
 pub fn draw(app: &mut MusicApp, ui: &mut egui::Ui) {
+    let ctx = ui.ctx().clone();
     ui.horizontal(|ui| {
         // ---------- 左：当前曲目 ----------
         ui.add(egui::Label::new(
@@ -30,6 +31,29 @@ pub fn draw(app: &mut MusicApp, ui: &mut egui::Ui) {
 
         // ---------- 右：工具栏 ----------
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            if ui
+                .add(toolbar_button(format!(
+                    "{} 置顶歌词",
+                    ICON_PUSH_PIN.codepoint
+                )))
+                .on_hover_text("切换到始终置顶的迷你歌词窗口")
+                .clicked()
+            {
+                app.enter_mini_mode(&ctx);
+            }
+            let (icon, text) = if app.dark_mode {
+                (ICON_LIGHT_MODE, "浅色")
+            } else {
+                (ICON_DARK_MODE, "深色")
+            };
+            if ui
+                .add(toolbar_button(format!("{} {text}", icon.codepoint)))
+                .on_hover_text("切换深色/浅色主题")
+                .clicked()
+            {
+                app.dark_mode = !app.dark_mode;
+                super::set_app_theme(&ctx, app.dark_mode);
+            }
             if ui
                 .add(toolbar_button(format!("{} 添加文件", ICON_ADD.codepoint)))
                 .on_hover_text("添加音频文件")
@@ -57,35 +81,6 @@ pub fn draw(app: &mut MusicApp, ui: &mut egui::Ui) {
             {
                 if let Some(dir) = rfd::FileDialog::new().pick_folder() {
                     app.add_paths(vec![dir]);
-                }
-            }
-            ui.separator();
-            if ui
-                .add(toolbar_button(format!(
-                    "{} 打开列表",
-                    ICON_FILE_OPEN.codepoint
-                )))
-                .on_hover_text("加载 m3u/m3u8 播放列表")
-                .clicked()
-            {
-                if let Some(path) = rfd::FileDialog::new()
-                    .add_filter("播放列表", &["m3u", "m3u8"])
-                    .pick_file()
-                {
-                    app.load_playlist_file(&path);
-                }
-            }
-            if ui
-                .add(toolbar_button(format!("{} 保存列表", ICON_SAVE.codepoint)))
-                .on_hover_text("保存为 m3u8")
-                .clicked()
-            {
-                if let Some(path) = rfd::FileDialog::new()
-                    .add_filter("m3u8 播放列表", &["m3u8"])
-                    .set_file_name("playlist.m3u8")
-                    .save_file()
-                {
-                    app.save_playlist_file(&path);
                 }
             }
         });

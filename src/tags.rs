@@ -47,6 +47,5 @@ pub fn load_track(path: &Path) -> Track {
 }
 
 fn non_empty(s: Option<std::borrow::Cow<'_, str>>) -> Option<String> {
-    s.map(|v| v.trim().to_string())
-        .filter(|v| !v.is_empty())
+    s.map(|v| v.trim().to_string()).filter(|v| !v.is_empty())
 }

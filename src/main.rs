@@ -4,7 +4,6 @@ mod app;
 mod audio;
 mod config;
 mod lyrics;
-mod m3u;
 mod playlist;
 mod tags;
 mod ui;

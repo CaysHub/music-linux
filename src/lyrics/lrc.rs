@@ -42,12 +42,12 @@ impl Lyrics {
 
 /// 解析字节流（自动探测编码）
 pub fn parse_bytes(bytes: &[u8]) -> Option<Lyrics> {
-    let text = decode(bytes);
+    let text = decode_text(bytes);
     parse_str(&text)
 }
 
 /// BOM → UTF-8 → GBK
-fn decode(bytes: &[u8]) -> String {
+pub fn decode_text(bytes: &[u8]) -> String {
     if bytes.starts_with(&[0xEF, 0xBB, 0xBF]) {
         return String::from_utf8_lossy(&bytes[3..]).into_owned();
     }
@@ -172,7 +172,10 @@ mod tests {
     #[test]
     fn time_tag_variants() {
         assert_eq!(parse_time_tag("01:30"), Some(Duration::from_secs(90)));
-        assert_eq!(parse_time_tag("01:30.5"), Some(Duration::from_millis(90_500)));
+        assert_eq!(
+            parse_time_tag("01:30.5"),
+            Some(Duration::from_millis(90_500))
+        );
         assert_eq!(
             parse_time_tag("01:30.500"),
             Some(Duration::from_millis(90_500))
