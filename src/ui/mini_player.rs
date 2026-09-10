@@ -13,8 +13,11 @@ use crate::playlist::PlayMode;
 const CONTROL_ROW_HEIGHT: f32 = 36.0;
 const LYRIC_ROW_HEIGHT: f32 = 42.0;
 const BUTTON_SIZE: egui::Vec2 = egui::vec2(22.0, 20.0);
-const VOLUME_WIDTH: f32 = 72.0;
 const CONTROL_RIGHT_PADDING: f32 = 10.0;
+const TITLE_SIDE_PADDING: f32 = 8.0;
+const TITLE_EQUALIZER_GAP: f32 = 5.0;
+const TITLE_EQUALIZER_SIZE: egui::Vec2 = egui::vec2(20.0, 16.0);
+const TITLE_FONT_SIZE: f32 = 14.0;
 const LYRIC_SIDE_PADDING: f32 = 24.0;
 const LYRIC_VERTICAL_PADDING: f32 = 5.0;
 const LYRIC_FONT_SIZE: f32 = 20.0;
@@ -42,11 +45,6 @@ pub fn draw(app: &mut MusicApp, ui: &mut egui::Ui, ctx: &egui::Context) {
 }
 
 fn draw_controls(app: &mut MusicApp, ui: &mut egui::Ui, ctx: &egui::Context) {
-    let drag = drag_handle(ui);
-    if drag.drag_started() {
-        ctx.send_viewport_cmd(egui::ViewportCommand::StartDrag);
-    }
-
     let playing = app
         .engine
         .as_ref()
@@ -76,11 +74,6 @@ fn draw_controls(app: &mut MusicApp, ui: &mut egui::Ui, ctx: &egui::Context) {
         app.next(true, ctx);
     }
 
-    let mode = app.playlist.mode;
-    if icon_button(ui, mode_icon(mode), 13.0, mode.label()).clicked() {
-        app.cycle_play_mode();
-    }
-
     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
         ui.add_space(CONTROL_RIGHT_PADDING);
         if icon_button(ui, ICON_CLOSE, 13.0, "关闭播放器").clicked() {
@@ -89,22 +82,95 @@ fn draw_controls(app: &mut MusicApp, ui: &mut egui::Ui, ctx: &egui::Context) {
         if icon_button(ui, ICON_OPEN_IN_FULL, 13.0, "恢复主界面").clicked() {
             app.exit_mini_mode(ctx);
         }
-
-        let mut volume = app.volume;
-        ui.spacing_mut().slider_width = VOLUME_WIDTH;
-        if ui
-            .add(egui::Slider::new(&mut volume, 0.0..=1.0).show_value(false))
-            .changed()
-        {
-            app.set_volume(volume);
+        let mode = app.playlist.mode;
+        if icon_button(ui, mode_icon(mode), 13.0, mode.label()).clicked() {
+            app.cycle_play_mode();
         }
-        let volume_icon = if app.volume <= 0.0 {
-            ICON_VOLUME_OFF
-        } else {
-            ICON_VOLUME_UP
-        };
-        static_icon(ui, volume_icon, 13.0);
+
+        draw_track_title(app, ui, ctx, playing);
     });
+}
+
+fn draw_track_title(app: &MusicApp, ui: &mut egui::Ui, ctx: &egui::Context, playing: bool) {
+    let (rect, response) = ui.allocate_exact_size(
+        egui::vec2(ui.available_width(), BUTTON_SIZE.y),
+        egui::Sense::drag(),
+    );
+    if response.drag_started() {
+        ctx.send_viewport_cmd(egui::ViewportCommand::StartDrag);
+    }
+    response.on_hover_text("拖动迷你窗口");
+
+    let current_track = app.current_track();
+    let title = current_track
+        .map(|track| track.title.as_str())
+        .unwrap_or("未播放");
+    let equalizer_width = if current_track.is_some() {
+        TITLE_EQUALIZER_GAP + TITLE_EQUALIZER_SIZE.x
+    } else {
+        0.0
+    };
+    let max_title_width = (rect.width() - TITLE_SIDE_PADDING * 2.0 - equalizer_width).max(1.0);
+    let galley = truncated_title_galley(ui, title, max_title_width);
+    let group_width = galley.size().x + equalizer_width;
+    let group_left = rect.center().x - group_width * 0.5;
+    let text_pos = egui::pos2(group_left, rect.center().y - galley.size().y * 0.5);
+    ui.painter().galley(
+        text_pos,
+        galley,
+        if current_track.is_some() {
+            ui.visuals().text_color()
+        } else {
+            ui.visuals().weak_text_color()
+        },
+    );
+
+    if current_track.is_some() {
+        let equalizer_rect = egui::Rect::from_center_size(
+            egui::pos2(
+                group_left + group_width - TITLE_EQUALIZER_SIZE.x * 0.5,
+                rect.center().y,
+            ),
+            TITLE_EQUALIZER_SIZE,
+        );
+        super::draw_equalizer(ui, equalizer_rect, ui.visuals().selection.bg_fill, playing);
+    }
+}
+
+fn truncated_title_galley(
+    ui: &egui::Ui,
+    title: &str,
+    max_width: f32,
+) -> std::sync::Arc<egui::Galley> {
+    let font = egui::FontId::new(TITLE_FONT_SIZE, egui::FontFamily::Proportional);
+    let color = ui.visuals().text_color();
+    let full = ui
+        .painter()
+        .layout_no_wrap(title.to_owned(), font.clone(), color);
+    if full.size().x <= max_width {
+        return full;
+    }
+
+    let chars: Vec<char> = title.chars().collect();
+    let mut low = 0;
+    let mut high = chars.len();
+    let mut best = ui
+        .painter()
+        .layout_no_wrap("…".to_owned(), font.clone(), color);
+    while low <= high {
+        let middle = low + (high - low) / 2;
+        let candidate = format!("{}…", chars[..middle].iter().collect::<String>());
+        let galley = ui.painter().layout_no_wrap(candidate, font.clone(), color);
+        if galley.size().x <= max_width {
+            best = galley;
+            low = middle + 1;
+        } else if middle == 0 {
+            break;
+        } else {
+            high = middle - 1;
+        }
+    }
+    best
 }
 
 fn icon_button(
@@ -134,20 +200,6 @@ fn icon_button_response(
         paint_icon(ui, rect, icon, size, visuals.fg_stroke.color);
     }
     response
-}
-
-fn drag_handle(ui: &mut egui::Ui) -> egui::Response {
-    let (rect, response) = ui.allocate_exact_size(BUTTON_SIZE, egui::Sense::drag());
-    if ui.is_rect_visible(rect) {
-        let color = ui.style().interact(&response).fg_stroke.color;
-        paint_icon(ui, rect, ICON_DRAG_INDICATOR, 13.0, color);
-    }
-    response.on_hover_text("拖动迷你窗口")
-}
-
-fn static_icon(ui: &mut egui::Ui, icon: egui_material_icons::MaterialIcon, size: f32) {
-    let (rect, _) = ui.allocate_exact_size(egui::vec2(16.0, BUTTON_SIZE.y), egui::Sense::hover());
-    paint_icon(ui, rect, icon, size, ui.visuals().text_color());
 }
 
 fn paint_icon(
