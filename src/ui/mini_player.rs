@@ -45,6 +45,11 @@ pub fn draw(app: &mut MusicApp, ui: &mut egui::Ui, ctx: &egui::Context) {
 }
 
 fn draw_controls(app: &mut MusicApp, ui: &mut egui::Ui, ctx: &egui::Context) {
+    let drag = drag_handle(ui);
+    if drag.drag_started() {
+        ctx.send_viewport_cmd(egui::ViewportCommand::StartDrag);
+    }
+
     let playing = app
         .engine
         .as_ref()
@@ -200,6 +205,15 @@ fn icon_button_response(
         paint_icon(ui, rect, icon, size, visuals.fg_stroke.color);
     }
     response
+}
+
+fn drag_handle(ui: &mut egui::Ui) -> egui::Response {
+    let (rect, response) = ui.allocate_exact_size(BUTTON_SIZE, egui::Sense::drag());
+    if ui.is_rect_visible(rect) {
+        let color = ui.style().interact(&response).fg_stroke.color;
+        paint_icon(ui, rect, ICON_DRAG_INDICATOR, 13.0, color);
+    }
+    response.on_hover_text("拖动迷你窗口")
 }
 
 fn paint_icon(
