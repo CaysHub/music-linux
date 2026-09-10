@@ -14,11 +14,16 @@ fn main() -> eframe::Result {
     // 如需恢复 Wayland 原生，删除此行即可。
     std::env::remove_var("WAYLAND_DISPLAY");
 
+    let app_icon =
+        eframe::icon_data::from_png_bytes(include_bytes!("../assets/icons/music-linux.png"))
+            .expect("embedded application icon must be a valid PNG");
     let options = eframe::NativeOptions {
         viewport: eframe::egui::ViewportBuilder::default()
             .with_inner_size([1200.0, 700.0])
             .with_min_inner_size([820.0, 500.0])
             .with_transparent(false)
+            .with_app_id("music-linux")
+            .with_icon(app_icon)
             .with_title("Music Player 音乐播放器"),
         ..Default::default()
     };

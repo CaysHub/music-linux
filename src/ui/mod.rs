@@ -14,12 +14,126 @@ use crate::app::{MainTab, MusicApp, PendingPlaylistAction};
 const RED: egui::Color32 = egui::Color32::from_rgb(225, 95, 95);
 const TOP_BAR_HEIGHT: f32 = 52.0;
 const BOTTOM_BAR_HEIGHT: f32 = 54.0;
+const LYRIC_PROGRESS_FADE_WIDTH: f32 = 28.0;
+const LYRIC_PROGRESS_FADE_STEPS: usize = 8;
 
 pub fn app_background(dark_mode: bool) -> egui::Color32 {
     if dark_mode {
         egui::Color32::from_rgb(14, 17, 16)
     } else {
         egui::Color32::from_rgb(236, 241, 238)
+    }
+}
+
+fn lyric_progress(
+    lyrics: &crate::lyrics::Lyrics,
+    index: usize,
+    position: std::time::Duration,
+    track_duration: Option<std::time::Duration>,
+) -> f32 {
+    let Some(line) = lyrics.lines.get(index) else {
+        return 0.0;
+    };
+    let end = lyrics
+        .lines
+        .get(index + 1)
+        .map(|next| next.time)
+        .or(track_duration.filter(|duration| *duration > line.time))
+        .unwrap_or_else(|| line.time + std::time::Duration::from_secs(4));
+    let span = end.saturating_sub(line.time).as_secs_f32().max(0.01);
+    let elapsed = position.saturating_sub(line.time).as_secs_f32();
+    (elapsed / span).clamp(0.0, 1.0)
+}
+
+fn paint_lyric_progress(
+    ui: &egui::Ui,
+    clip_rect: egui::Rect,
+    text_pos: egui::Pos2,
+    galley: std::sync::Arc<egui::Galley>,
+    progress: f32,
+) {
+    let base = ui.visuals().weak_text_color();
+    let accent = ui.visuals().selection.bg_fill;
+    let warm = if ui.visuals().dark_mode {
+        egui::Color32::from_rgb(244, 203, 112)
+    } else {
+        egui::Color32::from_rgb(190, 122, 31)
+    };
+    ui.painter()
+        .with_clip_rect(clip_rect)
+        .galley(text_pos, galley.clone(), base);
+
+    if progress <= 0.0 {
+        return;
+    }
+    let frontier = text_pos.x + galley.size().x * progress.clamp(0.0, 1.0);
+    let played_clip = clip_rect.intersect(egui::Rect::from_min_max(
+        clip_rect.min,
+        egui::pos2(frontier, clip_rect.max.y),
+    ));
+    ui.painter()
+        .with_clip_rect(played_clip)
+        .galley_with_override_text_color(text_pos, galley.clone(), accent);
+
+    let fade_width = galley.size().x.min(LYRIC_PROGRESS_FADE_WIDTH);
+    let fade_start = (frontier - fade_width).max(text_pos.x);
+    for step in 0..LYRIC_PROGRESS_FADE_STEPS {
+        let left = egui::lerp(
+            fade_start..=frontier,
+            step as f32 / LYRIC_PROGRESS_FADE_STEPS as f32,
+        );
+        let right = egui::lerp(
+            fade_start..=frontier,
+            (step + 1) as f32 / LYRIC_PROGRESS_FADE_STEPS as f32,
+        );
+        let color = mix_color(
+            accent,
+            warm,
+            (step + 1) as f32 / LYRIC_PROGRESS_FADE_STEPS as f32,
+        );
+        let clip = clip_rect.intersect(egui::Rect::from_min_max(
+            egui::pos2(left, clip_rect.min.y),
+            egui::pos2(right, clip_rect.max.y),
+        ));
+        ui.painter()
+            .with_clip_rect(clip)
+            .galley_with_override_text_color(text_pos, galley.clone(), color);
+    }
+}
+
+fn mix_color(a: egui::Color32, b: egui::Color32, t: f32) -> egui::Color32 {
+    let t = t.clamp(0.0, 1.0);
+    let mix = |x: u8, y: u8| (x as f32 + (y as f32 - x as f32) * t).round() as u8;
+    egui::Color32::from_rgb(mix(a.r(), b.r()), mix(a.g(), b.g()), mix(a.b(), b.b()))
+}
+
+fn draw_equalizer(ui: &egui::Ui, rect: egui::Rect, color: egui::Color32, playing: bool) {
+    let t = ui.ctx().input(|input| input.time) as f32;
+    let bars = 4;
+    let (bar_width, gap) = (3.0, 2.0);
+    let total_width = bars as f32 * bar_width + (bars - 1) as f32 * gap;
+    let left = rect.left() + (rect.width() - total_width) * 0.5;
+    let bottom = rect.bottom();
+    for index in 0..bars {
+        let height = if playing {
+            let speed = 6.0 + index as f32 * 1.4;
+            let phase = index as f32 * 1.9;
+            3.0 + 10.0 * (0.5 + 0.5 * (t * speed + phase).sin())
+        } else {
+            4.0
+        };
+        let x = left + index as f32 * (bar_width + gap);
+        let bar = egui::Rect::from_min_size(
+            egui::pos2(x, bottom - height),
+            egui::vec2(bar_width, height),
+        );
+        ui.painter().rect(
+            bar,
+            egui::CornerRadius::same(1),
+            color,
+            egui::Stroke::NONE,
+            egui::StrokeKind::Inside,
+        );
     }
 }
 

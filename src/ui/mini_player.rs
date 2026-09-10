@@ -10,11 +10,15 @@ use crate::audio::PlaybackState;
 use crate::lyrics::Lyrics;
 use crate::playlist::PlayMode;
 
-const ROW_HEIGHT: f32 = 30.0;
+const CONTROL_ROW_HEIGHT: f32 = 36.0;
+const LYRIC_ROW_HEIGHT: f32 = 42.0;
 const BUTTON_SIZE: egui::Vec2 = egui::vec2(22.0, 20.0);
-const VOLUME_WIDTH: f32 = 38.0;
-const LYRIC_SIDE_PADDING: f32 = 18.0;
-const LYRIC_FONT_SIZE: f32 = 16.0;
+const VOLUME_WIDTH: f32 = 72.0;
+const CONTROL_RIGHT_PADDING: f32 = 10.0;
+const RESTORE_TOOLTIP_WIDTH: f32 = 96.0;
+const LYRIC_SIDE_PADDING: f32 = 24.0;
+const LYRIC_VERTICAL_PADDING: f32 = 5.0;
+const LYRIC_FONT_SIZE: f32 = 20.0;
 
 pub fn draw(app: &mut MusicApp, ui: &mut egui::Ui, ctx: &egui::Context) {
     let background = super::app_background(app.dark_mode);
@@ -24,12 +28,12 @@ pub fn draw(app: &mut MusicApp, ui: &mut egui::Ui, ctx: &egui::Context) {
     ui.spacing_mut().item_spacing = egui::vec2(5.0, 0.0);
     ui.spacing_mut().button_padding = egui::vec2(2.0, 2.0);
     ui.allocate_ui_with_layout(
-        egui::vec2(ui.available_width(), ROW_HEIGHT),
+        egui::vec2(ui.available_width(), CONTROL_ROW_HEIGHT),
         egui::Layout::left_to_right(egui::Align::Center),
         |ui| draw_controls(app, ui, ctx),
     );
 
-    let divider_y = ui.min_rect().top() + ROW_HEIGHT;
+    let divider_y = ui.min_rect().top() + CONTROL_ROW_HEIGHT;
     ui.painter().hline(
         ui.max_rect().x_range(),
         divider_y,
@@ -79,10 +83,19 @@ fn draw_controls(app: &mut MusicApp, ui: &mut egui::Ui, ctx: &egui::Context) {
     }
 
     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+        ui.add_space(CONTROL_RIGHT_PADDING);
         if icon_button(ui, ICON_CLOSE, 13.0, "关闭播放器").clicked() {
             ctx.send_viewport_cmd(egui::ViewportCommand::Close);
         }
-        if icon_button(ui, ICON_OPEN_IN_FULL, 13.0, "恢复主界面").clicked() {
+        if icon_button_with_wide_tooltip(
+            ui,
+            ICON_OPEN_IN_FULL,
+            13.0,
+            "恢复主界面",
+            RESTORE_TOOLTIP_WIDTH,
+        )
+        .clicked()
+        {
             app.exit_mini_mode(ctx);
         }
 
@@ -109,6 +122,27 @@ fn icon_button(
     size: f32,
     tooltip: &str,
 ) -> egui::Response {
+    icon_button_response(ui, icon, size).on_hover_text(tooltip)
+}
+
+fn icon_button_with_wide_tooltip(
+    ui: &mut egui::Ui,
+    icon: egui_material_icons::MaterialIcon,
+    size: f32,
+    tooltip: &str,
+    tooltip_width: f32,
+) -> egui::Response {
+    icon_button_response(ui, icon, size).on_hover_ui_at_pointer(|ui| {
+        ui.set_min_width(tooltip_width);
+        ui.label(tooltip);
+    })
+}
+
+fn icon_button_response(
+    ui: &mut egui::Ui,
+    icon: egui_material_icons::MaterialIcon,
+    size: f32,
+) -> egui::Response {
     let (rect, response) = ui.allocate_exact_size(BUTTON_SIZE, egui::Sense::click());
     if ui.is_rect_visible(rect) {
         let visuals = ui.style().interact(&response);
@@ -121,7 +155,7 @@ fn icon_button(
         );
         paint_icon(ui, rect, icon, size, visuals.fg_stroke.color);
     }
-    response.on_hover_text(tooltip)
+    response
 }
 
 fn drag_handle(ui: &mut egui::Ui) -> egui::Response {
@@ -184,32 +218,28 @@ fn draw_lyric_line(app: &MusicApp, ui: &mut egui::Ui, ctx: &egui::Context) {
         ),
     };
 
-    let (rect, response) = ui.allocate_exact_size(ui.available_size(), egui::Sense::drag());
+    let (rect, response) = ui.allocate_exact_size(
+        egui::vec2(ui.available_width(), LYRIC_ROW_HEIGHT),
+        egui::Sense::drag(),
+    );
     if response.drag_started() {
         ctx.send_viewport_cmd(egui::ViewportCommand::StartDrag);
     }
 
-    let base = ui.visuals().weak_text_color();
-    let accent = ui.visuals().selection.bg_fill;
-    let warm = if ui.visuals().dark_mode {
-        egui::Color32::from_rgb(244, 203, 112)
-    } else {
-        egui::Color32::from_rgb(190, 122, 31)
-    };
-    let lyric_rect = rect.shrink2(egui::vec2(LYRIC_SIDE_PADDING, 2.0));
+    let lyric_rect = rect.shrink2(egui::vec2(LYRIC_SIDE_PADDING, LYRIC_VERTICAL_PADDING));
     let available_width = lyric_rect.width().max(1.0);
     let mut font_size = LYRIC_FONT_SIZE;
     let mut galley = ui.painter().layout_no_wrap(
         text.clone(),
         egui::FontId::new(font_size, egui::FontFamily::Proportional),
-        base,
+        ui.visuals().weak_text_color(),
     );
     if galley.size().x > available_width {
         font_size = (font_size * available_width / galley.size().x).clamp(12.0, LYRIC_FONT_SIZE);
         galley = ui.painter().layout_no_wrap(
             text,
             egui::FontId::new(font_size, egui::FontFamily::Proportional),
-            base,
+            ui.visuals().weak_text_color(),
         );
     }
 
@@ -217,36 +247,7 @@ fn draw_lyric_line(app: &MusicApp, ui: &mut egui::Ui, ctx: &egui::Context) {
         lyric_rect.center().x - galley.size().x * 0.5,
         lyric_rect.center().y - galley.size().y * 0.5,
     );
-    let lyric_painter = ui.painter().with_clip_rect(lyric_rect);
-    lyric_painter.galley(text_pos, galley.clone(), base);
-
-    if progress <= 0.0 {
-        return;
-    }
-    let frontier = text_pos.x + galley.size().x * progress.clamp(0.0, 1.0);
-    let played_clip = lyric_rect.intersect(egui::Rect::from_min_max(
-        lyric_rect.min,
-        egui::pos2(frontier, lyric_rect.max.y),
-    ));
-    ui.painter()
-        .with_clip_rect(played_clip)
-        .galley_with_override_text_color(text_pos, galley.clone(), accent);
-
-    let fade_width = galley.size().x.min(28.0);
-    let fade_start = (frontier - fade_width).max(text_pos.x);
-    const STEPS: usize = 8;
-    for step in 0..STEPS {
-        let left = egui::lerp(fade_start..=frontier, step as f32 / STEPS as f32);
-        let right = egui::lerp(fade_start..=frontier, (step + 1) as f32 / STEPS as f32);
-        let color = mix_color(accent, warm, (step + 1) as f32 / STEPS as f32);
-        let clip = lyric_rect.intersect(egui::Rect::from_min_max(
-            egui::pos2(left, lyric_rect.min.y),
-            egui::pos2(right, lyric_rect.max.y),
-        ));
-        ui.painter()
-            .with_clip_rect(clip)
-            .galley_with_override_text_color(text_pos, galley.clone(), color);
-    }
+    super::paint_lyric_progress(ui, lyric_rect, text_pos, galley, progress);
 }
 
 fn lyric_at(
@@ -259,21 +260,10 @@ fn lyric_at(
         return Some((&first.text, 0.0));
     };
     let line = &lyrics.lines[index];
-    let end = lyrics
-        .lines
-        .get(index + 1)
-        .map(|next| next.time)
-        .or(track_duration.filter(|duration| *duration > line.time))
-        .unwrap_or_else(|| line.time + Duration::from_secs(4));
-    let span = end.saturating_sub(line.time).as_secs_f32().max(0.01);
-    let elapsed = position.saturating_sub(line.time).as_secs_f32();
-    Some((&line.text, (elapsed / span).clamp(0.0, 1.0)))
-}
-
-fn mix_color(a: egui::Color32, b: egui::Color32, t: f32) -> egui::Color32 {
-    let t = t.clamp(0.0, 1.0);
-    let mix = |x: u8, y: u8| (x as f32 + (y as f32 - x as f32) * t).round() as u8;
-    egui::Color32::from_rgb(mix(a.r(), b.r()), mix(a.g(), b.g()), mix(a.b(), b.b()))
+    Some((
+        &line.text,
+        super::lyric_progress(lyrics, index, position, track_duration),
+    ))
 }
 
 #[cfg(test)]

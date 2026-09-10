@@ -109,17 +109,17 @@ pub fn draw(app: &mut MusicApp, ui: &mut egui::Ui, ctx: &egui::Context) {
 
                         let (indicator_rect, _) = row_ui
                             .allocate_exact_size(egui::vec2(INDEX_W, 24.0), egui::Sense::hover());
-                        if is_current {
-                            draw_equalizer(&mut row_ui, indicator_rect, accent, playing);
-                        } else {
-                            row_ui.painter().text(
-                                indicator_rect.right_center(),
-                                egui::Align2::RIGHT_CENTER,
-                                format!("{: >3}", i + 1),
-                                egui::FontId::monospace(13.5),
-                                ui.visuals().weak_text_color(),
-                            );
-                        }
+                        row_ui.painter().text(
+                            indicator_rect.right_center(),
+                            egui::Align2::RIGHT_CENTER,
+                            format!("{: >3}", i + 1),
+                            egui::FontId::monospace(13.5),
+                            if is_current {
+                                accent
+                            } else {
+                                ui.visuals().weak_text_color()
+                            },
+                        );
 
                         row_ui.add_space(COLUMN_GAP);
                         let right_w = TIME_W + REMOVE_W + COLUMN_GAP;
@@ -134,6 +134,7 @@ pub fn draw(app: &mut MusicApp, ui: &mut egui::Ui, ctx: &egui::Context) {
                             &track.album,
                             is_current,
                             accent,
+                            playing,
                         );
 
                         row_ui.with_layout(
@@ -210,9 +211,11 @@ fn draw_track_text(
     album: &str,
     is_current: bool,
     accent: egui::Color32,
+    playing: bool,
 ) {
     let meta = track_meta(artist, album);
-    let painter = ui.painter().with_clip_rect(ui.clip_rect().intersect(rect));
+    let clip_rect = ui.clip_rect().intersect(rect);
+    let painter = ui.painter().with_clip_rect(clip_rect);
     let title_color = if is_current {
         accent
     } else {
@@ -223,13 +226,38 @@ fn draw_track_text(
     } else {
         rect.top() + 17.0
     };
-    painter.text(
-        egui::pos2(rect.left(), title_y),
-        egui::Align2::LEFT_CENTER,
-        title,
+    let title_galley = painter.layout_no_wrap(
+        title.to_owned(),
         egui::FontId::proportional(if is_current { 15.5 } else { 15.0 }),
         title_color,
     );
+    let equalizer_rect = is_current.then(|| {
+        const EQUALIZER_WIDTH: f32 = 20.0;
+        const EQUALIZER_HEIGHT: f32 = 16.0;
+        const TITLE_GAP: f32 = 8.0;
+        let left =
+            (rect.left() + title_galley.size().x + TITLE_GAP).min(rect.right() - EQUALIZER_WIDTH);
+        egui::Rect::from_min_size(
+            egui::pos2(left, title_y - EQUALIZER_HEIGHT * 0.5),
+            egui::vec2(EQUALIZER_WIDTH, EQUALIZER_HEIGHT),
+        )
+    });
+    let title_clip = if let Some(equalizer_rect) = equalizer_rect {
+        clip_rect.intersect(egui::Rect::from_min_max(
+            rect.min,
+            egui::pos2(equalizer_rect.left() - 6.0, rect.max.y),
+        ))
+    } else {
+        clip_rect
+    };
+    ui.painter().with_clip_rect(title_clip).galley(
+        egui::pos2(rect.left(), title_y - title_galley.size().y * 0.5),
+        title_galley,
+        title_color,
+    );
+    if let Some(equalizer_rect) = equalizer_rect {
+        super::draw_equalizer(ui, equalizer_rect, accent, playing);
+    }
     if !meta.is_empty() {
         painter.text(
             egui::pos2(rect.left(), rect.top() + 35.0),
@@ -303,32 +331,4 @@ fn remove_button(
     }
 
     rect
-}
-
-/// 当前播放行的跳动均衡器（4 根柱子，正弦相位错开）
-fn draw_equalizer(ui: &mut egui::Ui, rect: egui::Rect, color: egui::Color32, playing: bool) {
-    let t = ui.ctx().input(|i| i.time) as f32;
-    let bars = 4;
-    let (bar_w, gap) = (3.0, 2.0);
-    let total_w = bars as f32 * bar_w + (bars - 1) as f32 * gap;
-    let x0 = rect.left() + (rect.width() - total_w) / 2.0;
-    let bottom = rect.bottom();
-    for i in 0..bars {
-        let h = if playing {
-            let speed = 6.0 + i as f32 * 1.4;
-            let phase = i as f32 * 1.9;
-            3.0 + 10.0 * (0.5 + 0.5 * (t * speed + phase).sin())
-        } else {
-            4.0
-        };
-        let x = x0 + i as f32 * (bar_w + gap);
-        let r = egui::Rect::from_min_size(egui::pos2(x, bottom - h), egui::vec2(bar_w, h));
-        ui.painter().rect(
-            r,
-            egui::CornerRadius::same(1),
-            color,
-            egui::Stroke::NONE,
-            egui::StrokeKind::Inside,
-        );
-    }
 }

@@ -11,7 +11,8 @@ use crate::lyrics;
 use crate::playlist::{is_supported_audio, PlayMode, Playlist, Track};
 use crate::tags;
 
-const MINI_WINDOW_SIZE: egui::Vec2 = egui::vec2(320.0, 60.0);
+const DEFAULT_MAIN_WINDOW_SIZE: egui::Vec2 = egui::vec2(1200.0, 700.0);
+const MINI_WINDOW_SIZE: egui::Vec2 = egui::vec2(460.0, 78.0);
 const MINI_RESIZE_ATTEMPTS: u8 = 20;
 
 /// 主区域显示的标签页
@@ -51,8 +52,11 @@ pub struct MusicApp {
     pub dark_mode: bool,
     pub mini_mode: bool,
     normal_window_size: Option<egui::Vec2>,
+    normal_window_outer_size: Option<egui::Vec2>,
     normal_window_maximized: bool,
     mini_resize_attempts: u8,
+    restored_window_on_top: bool,
+    restored_window_focused: bool,
     /// 进度条拖动中的预览位置（秒）
     pub seek_drag: Option<f64>,
     /// 用户最近一次手动滚动歌词的时间（暂停自动跟随）
@@ -106,8 +110,11 @@ impl MusicApp {
             dark_mode,
             mini_mode: false,
             normal_window_size: None,
+            normal_window_outer_size: None,
             normal_window_maximized: false,
             mini_resize_attempts: 0,
+            restored_window_on_top: false,
+            restored_window_focused: false,
             seek_drag: None,
             lyrics_user_scroll: None,
             lyrics_editor: None,
@@ -361,14 +368,22 @@ impl MusicApp {
         if self.mini_mode {
             return;
         }
-        (self.normal_window_size, self.normal_window_maximized) = ctx.input(|input| {
+        (
+            self.normal_window_size,
+            self.normal_window_outer_size,
+            self.normal_window_maximized,
+        ) = ctx.input(|input| {
+            let viewport = input.viewport();
             (
-                input.viewport().inner_rect.map(|rect| rect.size()),
-                input.viewport().maximized.unwrap_or(false),
+                viewport.inner_rect.map(|rect| rect.size()),
+                viewport.outer_rect.map(|rect| rect.size()),
+                viewport.maximized.unwrap_or(false),
             )
         });
         self.mini_mode = true;
         self.mini_resize_attempts = MINI_RESIZE_ATTEMPTS;
+        self.restored_window_on_top = false;
+        self.restored_window_focused = false;
         ctx.send_viewport_cmd(egui::ViewportCommand::Maximized(false));
         request_mini_window_size(ctx);
         ctx.send_viewport_cmd(egui::ViewportCommand::Decorations(false));
@@ -383,8 +398,12 @@ impl MusicApp {
         }
         self.mini_mode = false;
         self.mini_resize_attempts = 0;
+        self.restored_window_on_top = true;
+        self.restored_window_focused = false;
+        ctx.send_viewport_cmd(egui::ViewportCommand::Visible(true));
+        ctx.send_viewport_cmd(egui::ViewportCommand::Minimized(false));
         ctx.send_viewport_cmd(egui::ViewportCommand::WindowLevel(
-            egui::WindowLevel::Normal,
+            egui::WindowLevel::AlwaysOnTop,
         ));
         ctx.send_viewport_cmd(egui::ViewportCommand::Decorations(true));
         ctx.send_viewport_cmd(egui::ViewportCommand::Resizable(true));
@@ -392,16 +411,26 @@ impl MusicApp {
             820.0, 500.0,
         )));
         ctx.send_viewport_cmd(egui::ViewportCommand::MaxInnerSize(egui::Vec2::INFINITY));
+        let normal_window_size = self
+            .normal_window_size
+            .take()
+            .unwrap_or(DEFAULT_MAIN_WINDOW_SIZE);
+        let normal_window_outer_size = self
+            .normal_window_outer_size
+            .take()
+            .unwrap_or(normal_window_size);
         if self.normal_window_maximized {
             ctx.send_viewport_cmd(egui::ViewportCommand::Maximized(true));
         } else {
-            ctx.send_viewport_cmd(egui::ViewportCommand::InnerSize(
-                self.normal_window_size
-                    .take()
-                    .unwrap_or(egui::vec2(1200.0, 700.0)),
-            ));
+            ctx.send_viewport_cmd(egui::ViewportCommand::InnerSize(normal_window_size));
+            if let Some(monitor_size) = ctx.input(|input| input.viewport().monitor_size) {
+                ctx.send_viewport_cmd(egui::ViewportCommand::OuterPosition(
+                    centered_window_position(monitor_size, normal_window_outer_size),
+                ));
+            }
         }
         self.normal_window_maximized = false;
+        ctx.send_viewport_cmd(egui::ViewportCommand::Focus);
     }
 
     pub fn current_track(&self) -> Option<&Track> {
@@ -502,6 +531,13 @@ fn request_mini_window_size(ctx: &egui::Context) {
     ctx.send_viewport_cmd(egui::ViewportCommand::InnerSize(MINI_WINDOW_SIZE));
 }
 
+fn centered_window_position(monitor_size: egui::Vec2, window_size: egui::Vec2) -> egui::Pos2 {
+    egui::pos2(
+        ((monitor_size.x - window_size.x) * 0.5).max(0.0),
+        ((monitor_size.y - window_size.y) * 0.5).max(0.0),
+    )
+}
+
 impl eframe::App for MusicApp {
     fn clear_color(&self, _visuals: &egui::Visuals) -> [f32; 4] {
         crate::ui::app_background(self.dark_mode).to_normalized_gamma_f32()
@@ -509,6 +545,20 @@ impl eframe::App for MusicApp {
 
     /// 每帧逻辑（窗口隐藏时也会被调用，适合自动切歌与重绘调度）
     fn logic(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        if self.restored_window_on_top {
+            match ctx.input(|input| input.viewport().focused) {
+                Some(true) => self.restored_window_focused = true,
+                Some(false) if self.restored_window_focused => {
+                    self.restored_window_on_top = false;
+                    self.restored_window_focused = false;
+                    ctx.send_viewport_cmd(egui::ViewportCommand::WindowLevel(
+                        egui::WindowLevel::Normal,
+                    ));
+                }
+                _ => {}
+            }
+        }
+
         if self.mini_mode && self.mini_resize_attempts > 0 {
             let reached_target = ctx.input(|input| {
                 input.viewport().inner_rect.is_some_and(|rect| {

@@ -4,9 +4,14 @@ use eframe::egui;
 use egui_material_icons::icons::*;
 
 use crate::app::MusicApp;
+use crate::audio::PlaybackState;
 
 pub fn draw(app: &mut MusicApp, ui: &mut egui::Ui) {
     let ctx = ui.ctx().clone();
+    let playing = app
+        .engine
+        .as_ref()
+        .is_some_and(|engine| engine.state == PlaybackState::Playing);
     ui.horizontal(|ui| {
         // ---------- 左：当前曲目 ----------
         ui.add(egui::Label::new(
@@ -17,6 +22,9 @@ pub fn draw(app: &mut MusicApp, ui: &mut egui::Ui) {
                 ui.add(
                     egui::Label::new(egui::RichText::new(&t.title).strong().size(16.0)).truncate(),
                 );
+                let (equalizer_rect, _) =
+                    ui.allocate_exact_size(egui::vec2(20.0, 16.0), egui::Sense::hover());
+                super::draw_equalizer(ui, equalizer_rect, ui.visuals().selection.bg_fill, playing);
                 if !t.artist.is_empty() {
                     ui.weak(&t.artist);
                 }
