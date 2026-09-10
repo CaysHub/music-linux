@@ -15,7 +15,6 @@ const LYRIC_ROW_HEIGHT: f32 = 42.0;
 const BUTTON_SIZE: egui::Vec2 = egui::vec2(22.0, 20.0);
 const VOLUME_WIDTH: f32 = 72.0;
 const CONTROL_RIGHT_PADDING: f32 = 10.0;
-const RESTORE_TOOLTIP_WIDTH: f32 = 96.0;
 const LYRIC_SIDE_PADDING: f32 = 24.0;
 const LYRIC_VERTICAL_PADDING: f32 = 5.0;
 const LYRIC_FONT_SIZE: f32 = 20.0;
@@ -87,15 +86,7 @@ fn draw_controls(app: &mut MusicApp, ui: &mut egui::Ui, ctx: &egui::Context) {
         if icon_button(ui, ICON_CLOSE, 13.0, "关闭播放器").clicked() {
             ctx.send_viewport_cmd(egui::ViewportCommand::Close);
         }
-        if icon_button_with_wide_tooltip(
-            ui,
-            ICON_OPEN_IN_FULL,
-            13.0,
-            "恢复主界面",
-            RESTORE_TOOLTIP_WIDTH,
-        )
-        .clicked()
-        {
+        if icon_button(ui, ICON_OPEN_IN_FULL, 13.0, "恢复主界面").clicked() {
             app.exit_mini_mode(ctx);
         }
 
@@ -123,19 +114,6 @@ fn icon_button(
     tooltip: &str,
 ) -> egui::Response {
     icon_button_response(ui, icon, size).on_hover_text(tooltip)
-}
-
-fn icon_button_with_wide_tooltip(
-    ui: &mut egui::Ui,
-    icon: egui_material_icons::MaterialIcon,
-    size: f32,
-    tooltip: &str,
-    tooltip_width: f32,
-) -> egui::Response {
-    icon_button_response(ui, icon, size).on_hover_ui_at_pointer(|ui| {
-        ui.set_min_width(tooltip_width);
-        ui.label(tooltip);
-    })
 }
 
 fn icon_button_response(
